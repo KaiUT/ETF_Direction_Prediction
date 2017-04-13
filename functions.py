@@ -6,6 +6,7 @@ from matplotlib.dates import date2num
 from matplotlib.ticker import MaxNLocator
 from matplotlib.finance import candlestick_ohlc
 import pandas as pd
+from sklearn.model_selection import KFold
 
 
 def plot_raw_data(data, fig_path=''):
@@ -160,7 +161,9 @@ def fast_stochastic_oscillator(data, period=14, smoothing=3,\
     r""" Calculate Fast Stochastic Oscillator.
 
     """
-    _K = 100 * (data[columns[0]] - data[columns[2]].rolling(period).min()) / (data[columns[1]].rolling(period).max() - data[columns[2]].rolling(period).min())
+    _K = 100 * (data[columns[0]] - data[columns[2]].rolling(period).min()) /\
+    (data[columns[1]].rolling(period).max() -\
+     data[columns[2]].rolling(period).min())
     _D = _K.rolling(smoothing).mean()
     return data.join(_K.to_frame(add_columns[0]).join\
                      (_D.to_frame(add_columns[1]))), _K, _D
@@ -174,7 +177,8 @@ def slow_stochastic_oscillator(data, period=14, smoothing=3,\
     """
     _, fast_K, fast_D = fast_stochastic_oscillator(data, period=period,
                                                 smoothing=smoothing,
-                                                columns=columns)
+                                                columns=columns,
+                                                add_columns=['a', 'b'])
     _K = fast_D
     _D = _K.rolling(smoothing).mean()
     return data.join(_K.to_frame(add_columns[0]).join\
@@ -195,8 +199,8 @@ def acceleration(data, periods=[5, 34, 5], columns=['Close', 'High', 'Low'],\
 
     """
     median = (data[columns[1]] + data[columns[2]]) / 2
-    AO = median.rolling(periods[1]).mean() - median.rolling(periods[2]).mean()
-    AC = AO - AO.rolling(periods[0]).mean()
+    AO = median.rolling(periods[0]).mean() - median.rolling(periods[1]).mean()
+    AC = AO - AO.rolling(periods[2]).mean()
     return data.join(AC.to_frame(add_column))
 
 
@@ -231,7 +235,7 @@ def chaikin_oscillator(data, periods=[3, 10], min_periods=[0, 0],\
     r"""
 
     """
-    _, accdist_series = AccDist(data, columns=columns)
+    _, accdist_series = accDist(data, columns=columns, add_column='a')
     ewma1 = accdist_series.ewm(span=periods[0], min_periods=min_periods[0],
                               **kwargs).mean()
     ewma2 = accdist_series.ewm(span=periods[1], min_periods=min_periods[1],
@@ -306,6 +310,7 @@ def CCI(data, period=14, columns=['Close', 'High', 'Low'], add_column='CCI'):
     mean_absolute_deviation = TP.rolling(period).apply(mad)
     cci = (TP - moving_average) / (0.015 * mean_absolute_deviation)
     return data.join(cci.to_frame(add_column))
+
 
 
 
