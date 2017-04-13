@@ -6,7 +6,8 @@ from matplotlib.dates import date2num
 from matplotlib.ticker import MaxNLocator
 from matplotlib.finance import candlestick_ohlc
 import pandas as pd
-from sklearn.model_selection import KFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression, RandomizedLogisticRegression
 
 
 def plot_raw_data(data, fig_path=''):
@@ -312,10 +313,105 @@ def CCI(data, period=14, columns=['Close', 'High', 'Low'], add_column='CCI'):
     return data.join(cci.to_frame(add_column))
 
 
+def standardization(X_training, X_test):
+    r""" Standardize predictors by removing the mean and scaling to unit variance.
 
 
+    """
+    standardize = StandardScaler(with_mean=True, with_std=True)
+    fit_params = standardize.fit(X_training)  # compute mean and std
+    X_training_standard = standardize.transform(X_training)
+    X_test_standard = standardize.transform(X_test)
+    return X_training_standard, X_test_standard
 
 
+def _KFolds_filter(data, n_splits=10):
+    r""" Cross Validation
+
+
+    """
+    groups = data.shape[0] % n_splits
+    folds_list = []
+    for i in range(n_splits):
+        if i < groups:
+            size = data.shape[0] // n_splits + 1
+            folds_list.append(range(i*size, (i+1)*size))
+        else:
+            size = data.shape[0] // n_splits
+            folds_list.append(range(i*size, (i+1)*size))
+    return folds_list
+
+
+def _accuracy(data_true, data_pred):
+    r"""
+
+
+    """
+    false = sum(abs(data_pred - data_true))
+    result = 1 - false / data_pred.shape[0]
+    return result
+
+
+def logistic_CV(X, Y, Cs=[], n_splits=10):
+    r"""
+
+
+    """
+    folds = _KFolds_filter(X, n_splits=10)
+    accuracy_list = []
+    for c in Cs:
+        accuracy = 0
+        for i in range(len(folds))[1:]:
+            test_index = folds[i]
+            train_index = [item for sublist in folds[:i] for item in sublist]
+            X_train = X[train_index, :]
+            X_test = X[test_index, :]
+            Y_train = Y[train_index]
+            Y_test = Y[test_index]
+            # select features
+            RLR = RandomizedLogisticRegression(C=c)
+            RLR_fit = RLR.fit(X_train, Y_train)
+            X_train_selected = RLR.transform(X_train)
+            X_test_selected = RLR.transform(X_test)
+            # make predictions
+            LR = LogisticRegression(penalty='l1', C=c, solver='liblinear')
+            LR_fit = LR.fit(X_train_selected, Y_train)
+            # out of sample prediction
+            Y_test_pred = LR.predict(X_test_selected)
+            accuracy = accuracy + _accuracy(Y_test, Y_test_pred)
+        accuracy_list.append(accuracy / (n_splits - 1))
+    result = max(zip(accuracy_list, Cs))
+    accuracy = result[0]
+    c = result[1]
+    return accuracy_list, accuracy, c
+
+
+def logistic_Pred(X, Y, c, X_test=None, Y_test=None):
+    r"""
+
+
+    """
+    # select features
+    RLR = RandomizedLogisticRegression(C=c)
+    RLR_fit = RLR.fit(X, Y)
+    features_index = RLR.get_support()
+    X_train_selected = RLR.transform(X)
+    if X_test is not None and Y_test is not None:
+        X_test_selected = RLR.transform(X_test)
+    # make predictions
+    LR = LogisticRegression(penalty='l1', C=c, solver='liblinear')
+    LR_fit = LR.fit(X_train_selected, Y)
+    # in sample prediction
+    Y_train_pred = LR.predict(X_train_selected)
+    in_accuracy = _accuracy(Y, Y_train_pred)
+    if X_test is not None and Y_test is not None:
+        # out of sample prediction
+        Y_test_pred = LR.predict(X_test_selected)
+        out_accuracy = _accuracy(Y_test, Y_test_pred)
+        return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy,\
+                features_index
+    else:
+        return Y_train_pred, in_accuracy, features_index
 
 
 
