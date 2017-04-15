@@ -7,7 +7,8 @@ from matplotlib.ticker import MaxNLocator
 from matplotlib.finance import candlestick_ohlc
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression, RandomizedLogisticRegression
+from sklearn.linear_model import LogisticRegression, Lasso, Ridge
+from sklearn.neural_network import MLPRegressor, MLPClassifier
 
 
 def plot_raw_data(data, fig_path=''):
@@ -313,16 +314,19 @@ def CCI(data, period=14, columns=['Close', 'High', 'Low'], add_column='CCI'):
     return data.join(cci.to_frame(add_column))
 
 
-def standardization(X_training, X_test):
+def _standardization(X_train, columns_to_standardize=[], X_test=None):
     r""" Standardize predictors by removing the mean and scaling to unit variance.
 
 
     """
     standardize = StandardScaler(with_mean=True, with_std=True)
-    fit_params = standardize.fit(X_training)  # compute mean and std
-    X_training_standard = standardize.transform(X_training)
-    X_test_standard = standardize.transform(X_test)
-    return X_training_standard, X_test_standard
+    fit_params = standardize.fit(X_train[:, columns_to_standardize])  # compute mean and std
+    X_train[:, columns_to_standardize] = standardize.transform(X_train[:, columns_to_standardize])
+    if X_test is not None:
+        X_test[:, columns_to_standardize] = standardize.transform(X_test[:, columns_to_standardize])
+    else:
+        X_test = None
+    return X_train, X_test
 
 
 def _KFolds_filter(data, n_splits=10):
@@ -343,7 +347,7 @@ def _KFolds_filter(data, n_splits=10):
 
 
 def _accuracy(data_true, data_pred):
-    r"""
+    r""" Accuracy for binary data.
 
 
     """
@@ -352,7 +356,8 @@ def _accuracy(data_true, data_pred):
     return result
 
 
-def logistic_CV(X, Y, Cs=[], n_splits=10):
+def logistic_CV(X, Y, Cs=[], n_splits=10,
+                columns_to_standardize=[], penalty='l1'):
     r"""
 
 
@@ -368,16 +373,16 @@ def logistic_CV(X, Y, Cs=[], n_splits=10):
             X_test = X[test_index, :]
             Y_train = Y[train_index]
             Y_test = Y[test_index]
-            # select features
-            RLR = RandomizedLogisticRegression(C=c)
-            RLR_fit = RLR.fit(X_train, Y_train)
-            X_train_selected = RLR.transform(X_train)
-            X_test_selected = RLR.transform(X_test)
+            # standardization
+            X_train_standard, X_test_standard =\
+                    _standardization(X_train,
+                                     columns_to_standardize=columns_to_standardize,
+                                     X_test=X_test)
             # make predictions
-            LR = LogisticRegression(penalty='l1', C=c, solver='liblinear')
-            LR_fit = LR.fit(X_train_selected, Y_train)
+            LR = LogisticRegression(penalty=penalty, C=c, solver='liblinear')
+            LR_fit = LR.fit(X_train_standard, Y_train)
             # out of sample prediction
-            Y_test_pred = LR.predict(X_test_selected)
+            Y_test_pred = LR.predict(X_test_standard)
             accuracy = accuracy + _accuracy(Y_test, Y_test_pred)
         accuracy_list.append(accuracy / (n_splits - 1))
     result = max(zip(accuracy_list, Cs))
@@ -386,47 +391,335 @@ def logistic_CV(X, Y, Cs=[], n_splits=10):
     return accuracy_list, accuracy, c
 
 
-def logistic_Pred(X, Y, c, X_test=None, Y_test=None):
+def logistic_Pred(X, Y, c, penalty='l1',
+                  columns_to_standardize=[], X_test=None,
+                  Y_test=None):
     r"""
 
 
     """
-    # select features
-    RLR = RandomizedLogisticRegression(C=c)
-    RLR_fit = RLR.fit(X, Y)
-    features_index = RLR.get_support()
-    X_train_selected = RLR.transform(X)
-    if X_test is not None and Y_test is not None:
-        X_test_selected = RLR.transform(X_test)
+    # standardization
+    X_train_standard, X_test_standard =\
+            _standardization(X, columns_to_standardize=columns_to_standardize,
+                             X_test=X_test)
     # make predictions
-    LR = LogisticRegression(penalty='l1', C=c, solver='liblinear')
-    LR_fit = LR.fit(X_train_selected, Y)
+    LR = LogisticRegression(penalty=penalty, C=c, solver='liblinear')
+    LR_fit = LR.fit(X_train_standard, Y)
     # in sample prediction
-    Y_train_pred = LR.predict(X_train_selected)
+    Y_train_pred = LR.predict(X_train_standard)
     in_accuracy = _accuracy(Y, Y_train_pred)
     if X_test is not None and Y_test is not None:
         # out of sample prediction
-        Y_test_pred = LR.predict(X_test_selected)
+        Y_test_pred = LR.predict(X_test_standard)
         out_accuracy = _accuracy(Y_test, Y_test_pred)
-        return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy,\
-                features_index
     else:
-        return Y_train_pred, in_accuracy, features_index
+        Y_test_pred = None
+        out_accuracy = None
+    return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
+
+
+def data_transform(data, data_format='percentage'):
+    r"""
+
+
+    """
+    data_copy = copy.deepcopy(data)
+    if data_format is 'percentage':
+        data_copy[data_copy < 0] = 0
+        data_copy[data_copy > 0] = 1
+    elif data_format is 'ratio':
+        data_copy[data_copy < 1] = 0
+        data_copy[data_copy > 1] = 1
+    return data_copy
+
+
+def lasso_CV(X, Y, Alphas=[], n_splits=10,
+             columns_to_standardize=[], Y_format='percentage'):
+    r"""
+
+
+
+    """
+    folds = _KFolds_filter(X, n_splits=10)
+    accuracy_list = []
+    for alpha in Alphas:
+        accuracy = 0
+        for i in range(len(folds))[1:]:
+            test_index = folds[i]
+            train_index = [item for sublist in folds[:i] for item in sublist]
+            X_train = X[train_index, :]
+            X_test = X[test_index, :]
+            Y_train = Y[train_index]
+            Y_test = Y[test_index]
+            # standardization
+            X_train_standard, X_test_standard =\
+                    _standardization(X_train,
+                                     columns_to_standardize=columns_to_standardize,
+                                     X_test=X_test)
+            # make predictions
+            LR = Lasso(alpha=alpha)
+            LR_fit = LR.fit(X_train_standard, Y_train)
+            # out of sample prediction
+            Y_test_pred = LR.predict(X_test_standard)
+            # transform Y to binary data before calculating accuracy.
+            Y_test_transform = data_transform(Y_test, data_format=Y_format)
+            Y_test_pred_transform = data_transform(Y_test_pred,
+                                                    data_format=Y_format)
+            accuracy = accuracy + _accuracy(Y_test_transform,
+                                            Y_test_pred_transform)
+        accuracy_list.append(accuracy / (n_splits - 1))
+    result = max(zip(accuracy_list, Alphas))
+    accuracy = result[0]
+    alpha = result[1]
+    return accuracy_list, accuracy, alpha
+
+
+def lasso_Pred(X, Y, alpha, columns_to_standardize=[], X_test=None, Y_test=None, Y_format='percentage'):
+    r"""
+
+
+    """
+    # standardization
+    X_train_standard, X_test_standard =\
+            _standardization(X, columns_to_standardize=columns_to_standardize,
+                             X_test=X_test)
+    # make predictions
+    LR = Lasso(alpha=alpha)
+    LR_fit = LR.fit(X_train_standard, Y)
+    # in sample prediction
+    Y_train_pred = LR.predict(X_train_standard)
+    # transform Y to binary data before calculating accuracy.
+    Y_train_transform = data_transform(Y, data_format=Y_format)
+    Y_train_pred_transform = data_transform(Y_train_pred,
+                                            data_format=Y_format)
+    in_accuracy = _accuracy(Y_train_transform, Y_train_pred_transform)
+    if X_test is not None and Y_test is not None:
+        # out of sample prediction
+        Y_test_pred = LR.predict(X_test_standard)
+        # transform Y to binary data before calculating accuracy.
+        Y_test_transform = data_transform(Y_test, data_format=Y_format)
+        Y_test_pred_transform = data_transform(Y_test_pred,
+                                                data_format=Y_format)
+        out_accuracy = _accuracy(Y_test_transform, Y_test_pred_transform)
+    else:
+        Y_test_pred = None
+        out_accuracy = None
+    return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
 
 
 
 
+def ridge_CV(X, Y, Alphas=[], n_splits=10, columns_to_standardize=[], Y_format='percentage'):
+    r"""
 
 
 
+    """
+    folds = _KFolds_filter(X, n_splits=10)
+    accuracy_list = []
+    for alpha in Alphas:
+        accuracy = 0
+        for i in range(len(folds))[1:]:
+            test_index = folds[i]
+            train_index = [item for sublist in folds[:i] for item in sublist]
+            X_train = X[train_index, :]
+            X_test = X[test_index, :]
+            Y_train = Y[train_index]
+            Y_test = Y[test_index]
+            # standardization
+            X_train_standard, X_test_standard =\
+                    _standardization(X_train,
+                                     columns_to_standardize=columns_to_standardize,
+                                     X_test=X_test)
+            # make predictions
+            LR = Ridge(alpha=alpha)
+            LR_fit = LR.fit(X_train_standard, Y_train)
+            # out of sample prediction
+            Y_test_pred = LR.predict(X_test_standard)
+            # transform Y to binary data before calculating accuracy.
+            Y_test_transform = data_transform(Y_test, data_format=Y_format)
+            Y_test_pred_transform = data_transform(Y_test_pred,
+                                                    data_format=Y_format)
+            accuracy = accuracy + _accuracy(Y_test_transform,
+                                            Y_test_pred_transform)
+        accuracy_list.append(accuracy / (n_splits - 1))
+    result = max(zip(accuracy_list, Alphas))
+    accuracy = result[0]
+    alpha = result[1]
+    return accuracy_list, accuracy, alpha
+
+
+def ridge_Pred(X, Y, alpha, columns_to_standardize=[],
+               X_test=None, Y_test=None, Y_format='percentage'):
+    r"""
+
+
+    """
+    # standardization
+    X_train_standard, X_test_standard =\
+            _standardization(X, columns_to_standardize=columns_to_standardize,
+                             X_test=X_test)
+    # make predictions
+    LR = Ridge(alpha=alpha)
+    LR_fit = LR.fit(X_train_standard, Y)
+    # in sample prediction
+    Y_train_pred = LR.predict(X_train_standard)
+    # transform Y to binary data before calculating accuracy.
+    Y_train_transform = data_transform(Y, data_format=Y_format)
+    Y_train_pred_transform = data_transform(Y_train_pred,
+                                            data_format=Y_format)
+    in_accuracy = _accuracy(Y_train_transform, Y_train_pred_transform)
+    if X_test is not None and Y_test is not None:
+        # out of sample prediction
+        Y_test_pred = LR.predict(X_test_standard)
+        # transform Y to binary data before calculating accuracy.
+        Y_test_transform = data_transform(Y_test, data_format=Y_format)
+        Y_test_pred_transform = data_transform(Y_test_pred,
+                                                data_format=Y_format)
+        out_accuracy = _accuracy(Y_test_transform, Y_test_pred_transform)
+    else:
+        Y_test_pred = None
+        out_accuracy = None
+    return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
+
+
+def MLPRegressor_CV(X, Y, hidden_layer_sizes=[], Alphas=[], n_splits=10, columns_to_standardize=[], Y_format='percentage'):
+    r"""
 
 
 
+    """
+    folds = _KFolds_filter(X, n_splits=10)
+    accuracy_list = []
+    for sizes in hidden_layer_sizes:
+        for alpha in Alphas:
+            accuracy = 0
+            for i in range(len(folds))[1:]:
+                test_index = folds[i]
+                train_index = [item for sublist in folds[:i] for item in sublist]
+                X_train = X[train_index, :]
+                X_test = X[test_index, :]
+                Y_train = Y[train_index]
+                Y_test = Y[test_index]
+                # standardization
+                X_train_standard, X_test_standard =\
+                        _standardization(X_train,
+                                         columns_to_standardize=columns_to_standardize,
+                                         X_test=X_test)
+                # make predictions
+                MLPR = MLPRegressor(hidden_layer_sizes=sizes, alpha=alpha,
+                                  early_stopping=True)
+                MLPR_fit = MLPR.fit(X_train_standard, Y_train)
+                # out of sample prediction
+                Y_test_pred = MLPR.predict(X_test_standard)
+                # transform Y to binary data before calculating accuracy.
+                Y_test_transform = data_transform(Y_test, data_format=Y_format)
+                Y_test_pred_transform = data_transform(Y_test_pred,
+                                                        data_format=Y_format)
+                accuracy = accuracy + _accuracy(Y_test_transform,
+                                                Y_test_pred_transform)
+            accuracy_list.append(accuracy / (n_splits - 1))
+    result = max(zip(accuracy_list, hidden_layer_sizes, Alphas))
+    accuracy = result[0]
+    sizes = result[1]
+    alpha = result[2]
+    return accuracy_list, accuracy, sizes, alpha
+
+
+def MLPRegressor_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[],
+               X_test=None, Y_test=None, Y_format='percentage'):
+    r"""
+
+
+    """
+    # standardization
+    X_train_standard, X_test_standard =\
+            _standardization(X, columns_to_standardize=columns_to_standardize,
+                             X_test=X_test)
+    # make predictions
+    MLPR = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, alpha=alpha)
+    MLPR_fit = MLPR.fit(X_train_standard, Y)
+    # in sample prediction
+    Y_train_pred = MLPR.predict(X_train_standard)
+    # transform Y to binary data before calculating accuracy.
+    Y_train_transform = data_transform(Y, data_format=Y_format)
+    Y_train_pred_transform = data_transform(Y_train_pred,
+                                            data_format=Y_format)
+    in_accuracy = _accuracy(Y_train_transform, Y_train_pred_transform)
+    if X_test is not None and Y_test is not None:
+        # out of sample prediction
+        Y_test_pred = MLPR.predict(X_test_standard)
+        # transform Y to binary data before calculating accuracy.
+        Y_test_transform = data_transform(Y_test, data_format=Y_format)
+        Y_test_pred_transform = data_transform(Y_test_pred,
+                                                data_format=Y_format)
+        out_accuracy = _accuracy(Y_test_transform, Y_test_pred_transform)
+    else:
+        Y_test_pred = None
+        out_accuracy = None
+    return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
+
+
+def MLPClassifier_CV(X, Y, hidden_layer_sizes=[], Alphas=[], n_splits=10, columns_to_standardize=[]):
+    r"""
 
 
 
+    """
+    folds = _KFolds_filter(X, n_splits=10)
+    accuracy_list = []
+    for sizes in hidden_layer_sizes:
+        for alpha in Alphas:
+            accuracy = 0
+            for i in range(len(folds))[1:]:
+                test_index = folds[i]
+                train_index = [item for sublist in folds[:i] for item in sublist]
+                X_train = X[train_index, :]
+                X_test = X[test_index, :]
+                Y_train = Y[train_index]
+                Y_test = Y[test_index]
+                # standardization
+                X_train_standard, X_test_standard =\
+                        _standardization(X_train,
+                                         columns_to_standardize=columns_to_standardize,
+                                         X_test=X_test)
+                # make predictions
+                MLPC = MLPClassifier(hidden_layer_sizes=sizes, alpha=alpha,
+                                  early_stopping=True)
+                MLPC_fit = MLPC.fit(X_train_standard, Y_train)
+                # out of sample prediction
+                Y_test_pred = MLPC.predict(X_test_standard)
+                accuracy = accuracy + _accuracy(Y_test,
+                                                Y_test_pred)
+            accuracy_list.append(accuracy / (n_splits - 1))
+    result = max(zip(accuracy_list, hidden_layer_sizes, Alphas))
+    accuracy = result[0]
+    sizes = result[1]
+    alpha = result[2]
+    return accuracy_list, accuracy, sizes, alpha
 
 
+def MLPClassifier_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[],
+               X_test=None, Y_test=None):
+    r"""
 
 
-
+    """
+    # standardization
+    X_train_standard, X_test_standard =\
+            _standardization(X, columns_to_standardize=columns_to_standardize,
+                             X_test=X_test)
+    # make predictions
+    MLPC = MLPClassifier(hidden_layer_sizes=hidden_layer_sizes, alpha=alpha)
+    MLPC_fit = MLPC.fit(X_train_standard, Y)
+    # in sample prediction
+    Y_train_pred = MLPC.predict(X_train_standard)
+    in_accuracy = _accuracy(Y, Y_train_pred)
+    if X_test is not None and Y_test is not None:
+        # out of sample prediction
+        Y_test_pred = MLPC.predict(X_test_standard)
+        out_accuracy = _accuracy(Y_test, Y_test_pred)
+    else:
+        Y_test_pred = None
+        out_accuracy = None
+    return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
