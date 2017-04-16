@@ -723,3 +723,38 @@ def MLPClassifier_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[
         Y_test_pred = None
         out_accuracy = None
     return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
+
+
+def trading_strategy(data, predicted_dicrection, columns=['Open', 'Close']):
+    r""" Calculate cumulative daily profit-and-loss (P&L).
+
+    Strategy:
+
+    """
+    predicted_dicrection[predicted_dicrection == 0] = -1
+    daily = (data[columns[1]] - data[columns[0]]) / data[columns[0]] *\
+            predicted_dicrection
+    cumsum_PL = daily.cumsum()
+    return cumsum_PL
+
+
+def SPY_longOnly_strategy(data, columns=['Open', 'Close']):
+    r""" Calculate cumulative daily profit-and-loss (P&L).
+
+    Baseline strategy 1:
+
+    """
+    daily = 9 * (data[columns[1]] - data[columns[0]]) / data[columns[0]]
+    cumsum_PL = daily.cumsum()
+    return cumsum_PL
+
+
+def SPY_longOnly_strategy(data, columns=['Open', 'Close']):
+    r""" Calculate cumulative daily profit-and-loss (P&L).
+
+    Baseline strategy 2:
+
+    """
+    daily = (data[columns[1]] - data[columns[0]]) / data[columns[0]]
+    cumsum_PL = daily.cumsum()
+    return cumsum_PL
