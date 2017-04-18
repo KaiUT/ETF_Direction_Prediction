@@ -49,8 +49,6 @@ def EWMA(data, period, min_periods=0, column='Close', add_column='EWMA', **kwarg
 
     Using Smoothing Factor 2/(1+N), where N is periods.
 
-    if min_period should be considered??
-
     """
     ewma = data[column].ewm(span=period, min_periods=min_periods, **kwargs).mean()
     return data.join(ewma.to_frame(add_column))
@@ -62,8 +60,6 @@ def MACD(data, min_periods=[0,0], column='Close', add_column='MACD', **kwargs):
     The MACD line is the 12-day EWMA less the 26-day EWMA.
 
     Using Smoothing Factor 2/(1+N), where N is periods.
-
-    if min_period should be considered??
 
     NOTE: similar to Price Oscillator (OSCP).
 
@@ -81,8 +77,6 @@ def RSI(data, period=14, min_periods=0, column='Close', add_column='RSI'):
 
     Here using Smoothed Modified Moving Average (SMMA), where smoothing
     parameter is 1/N.
-
-    if min_period should be considered??
 
     """
     delta = data[column].diff()
@@ -188,7 +182,7 @@ def slow_stochastic_oscillator(data, period=14, smoothing=3,\
 
 
 def momentum(data, period=4, column='Close', add_column='Momentum'):
-    r"""
+    r""" Calculate Momentum.
 
     """
     M = data[column] / data[column].shift(period) * 100
@@ -197,7 +191,7 @@ def momentum(data, period=4, column='Close', add_column='Momentum'):
 
 def acceleration(data, periods=[5, 34, 5], columns=['Close', 'High', 'Low'],\
                  add_column='Acceleration'):
-    r"""
+    r""" Calculate Acceleration.
 
     """
     median = (data[columns[1]] + data[columns[2]]) / 2
@@ -208,7 +202,7 @@ def acceleration(data, periods=[5, 34, 5], columns=['Close', 'High', 'Low'],\
 
 def williams_R(data, period=14, columns=['Close', 'High', 'Low'],
                add_column='Williams_%R'):
-    r"""
+    r""" Calculate Williams R.
 
     """
     williams = (data[columns[1]].rolling(period).max() - data[columns[0]]) /\
@@ -220,7 +214,6 @@ def williams_R(data, period=14, columns=['Close', 'High', 'Low'],
 def accDist(data, columns=['Close', 'High', 'Low', 'Volume'],
             add_column='Acc/Dist'):
     r""" Calculate Accumulation/Distribution
-
 
     """
     CLV = ((data[columns[0]] - data[columns[2]]) - \
@@ -234,7 +227,7 @@ def accDist(data, columns=['Close', 'High', 'Low', 'Volume'],
 def chaikin_oscillator(data, periods=[3, 10], min_periods=[0, 0],\
                        columns=['Close', 'High', 'Low', 'Volume'],
                        add_column='Chaikin_Oscillator', **kwargs):
-    r"""
+    r""" Calculate Chaikin Oscillator.
 
     """
     _, accdist_series = accDist(data, columns=columns, add_column='a')
@@ -248,7 +241,7 @@ def chaikin_oscillator(data, periods=[3, 10], min_periods=[0, 0],\
 
 def william_AccDist(data, columns=['Close', 'High', 'Low'],
                     add_column='William_AccDist'):
-    r"""
+    r""" Calculate William Accumulation/distribution.
 
     """
     AD_list = []
@@ -271,7 +264,6 @@ def william_AccDist(data, columns=['Close', 'High', 'Low'],
 
 def on_balance_volume(data, columns=['Close', 'Volume'], add_column='OBV'):
     r""" Calculate On Balance Volume (OBV).
-
 
     """
     OBV_list = [0]
@@ -303,7 +295,6 @@ def disparity_index(data, period=5, min_periods=0, column='Close',
 def CCI(data, period=14, columns=['Close', 'High', 'Low'], add_column='CCI'):
     r""" Calculate Commodity Channel Index (CCI).
 
-
     """
     TP = (data[columns[0]] + data[columns[1]] + data[columns[2]]) / 3
     moving_average = TP.rolling(period).mean()
@@ -317,7 +308,6 @@ def CCI(data, period=14, columns=['Close', 'High', 'Low'], add_column='CCI'):
 def _standardization(X_train, columns_to_standardize=[], X_test=None):
     r""" Standardize predictors by removing the mean and scaling to unit variance.
 
-
     """
     standardize = StandardScaler(with_mean=True, with_std=True)
     fit_params = standardize.fit(X_train[:, columns_to_standardize])  # compute mean and std
@@ -330,8 +320,7 @@ def _standardization(X_train, columns_to_standardize=[], X_test=None):
 
 
 def _KFolds_filter(data, n_splits=10):
-    r""" Cross Validation
-
+    r""" Cross Validation.
 
     """
     groups = data.shape[0] % n_splits
@@ -349,7 +338,6 @@ def _KFolds_filter(data, n_splits=10):
 def _accuracy(data_true, data_pred):
     r""" Accuracy for binary data.
 
-
     """
     false = sum(abs(data_pred - data_true))
     result = 1 - false / data_pred.shape[0]
@@ -358,8 +346,7 @@ def _accuracy(data_true, data_pred):
 
 def logistic_CV(X, Y, Cs=[], n_splits=10,
                 columns_to_standardize=[], penalty='l1'):
-    r"""
-
+    r""" Tune parameters in logistic regression using CV.
 
     """
     folds = _KFolds_filter(X, n_splits=10)
@@ -394,8 +381,7 @@ def logistic_CV(X, Y, Cs=[], n_splits=10,
 def logistic_Pred(X, Y, c, penalty='l1',
                   columns_to_standardize=[], X_test=None,
                   Y_test=None):
-    r"""
-
+    r""" Prediction using logistic regression.
 
     """
     # standardization
@@ -419,8 +405,7 @@ def logistic_Pred(X, Y, c, penalty='l1',
 
 
 def data_transform(data, data_format='percentage'):
-    r"""
-
+    r""" Transform percentage/ratio to binary data.
 
     """
     data_copy = copy.deepcopy(data)
@@ -435,9 +420,7 @@ def data_transform(data, data_format='percentage'):
 
 def lasso_CV(X, Y, Alphas=[], n_splits=10,
              columns_to_standardize=[], Y_format='percentage'):
-    r"""
-
-
+    r""" Tune parameters in Lasso regression using CV.
 
     """
     folds = _KFolds_filter(X, n_splits=10)
@@ -475,8 +458,7 @@ def lasso_CV(X, Y, Alphas=[], n_splits=10,
 
 
 def lasso_Pred(X, Y, alpha, columns_to_standardize=[], X_test=None, Y_test=None, Y_format='percentage'):
-    r"""
-
+    r""" Prediction using Lasso regression.
 
     """
     # standardization
@@ -510,9 +492,7 @@ def lasso_Pred(X, Y, alpha, columns_to_standardize=[], X_test=None, Y_test=None,
 
 
 def ridge_CV(X, Y, Alphas=[], n_splits=10, columns_to_standardize=[], Y_format='percentage'):
-    r"""
-
-
+    r""" Tune parameters in Ridge regression using CV.
 
     """
     folds = _KFolds_filter(X, n_splits=10)
@@ -551,8 +531,7 @@ def ridge_CV(X, Y, Alphas=[], n_splits=10, columns_to_standardize=[], Y_format='
 
 def ridge_Pred(X, Y, alpha, columns_to_standardize=[],
                X_test=None, Y_test=None, Y_format='percentage'):
-    r"""
-
+    r""" Prediction using Ridge regression.
 
     """
     # standardization
@@ -584,9 +563,7 @@ def ridge_Pred(X, Y, alpha, columns_to_standardize=[],
 
 
 def MLPRegressor_CV(X, Y, hidden_layer_sizes=[], Alphas=[], n_splits=10, columns_to_standardize=[], Y_format='percentage'):
-    r"""
-
-
+    r""" Tune parameters in MLP regressor using CV.
 
     """
     folds = _KFolds_filter(X, n_splits=10)
@@ -628,8 +605,7 @@ def MLPRegressor_CV(X, Y, hidden_layer_sizes=[], Alphas=[], n_splits=10, columns
 
 def MLPRegressor_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[],
                X_test=None, Y_test=None, Y_format='percentage'):
-    r"""
-
+    r""" Prediction using MLP regressor.
 
     """
     # standardization
@@ -661,9 +637,7 @@ def MLPRegressor_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[]
 
 
 def MLPClassifier_CV(X, Y, hidden_layer_sizes=[], Alphas=[], n_splits=10, columns_to_standardize=[]):
-    r"""
-
-
+    r""" Tune parameters in MLP classifier using CV.
 
     """
     folds = _KFolds_filter(X, n_splits=10)
@@ -701,8 +675,7 @@ def MLPClassifier_CV(X, Y, hidden_layer_sizes=[], Alphas=[], n_splits=10, column
 
 def MLPClassifier_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[],
                X_test=None, Y_test=None):
-    r"""
-
+    r""" Prediction using MLP classifier.
 
     """
     # standardization
@@ -725,36 +698,45 @@ def MLPClassifier_Pred(X, Y, hidden_layer_sizes, alpha, columns_to_standardize=[
     return Y_test_pred, out_accuracy, Y_train_pred, in_accuracy
 
 
-def trading_strategy(data, predicted_dicrection, columns=['Open', 'Close']):
-    r""" Calculate cumulative daily profit-and-loss (P&L).
-
-    Strategy:
+def trading_strategy(data, predicted_direction, columns=['Open', 'Close']):
+    r""" Calculate cumulative daily profit-and-loss (P&L) using the strategy
+    based on prediction.
 
     """
-    predicted_dicrection[predicted_dicrection == 0] = -1
-    daily = (data[columns[1]] - data[columns[0]]) / data[columns[0]] *\
-            predicted_dicrection
+    direction = copy.deepcopy(predicted_direction)
+    direction[direction == 0] = -1
+    daily = (data[columns[1]][1:] - data[columns[0]][1:]) /\
+            data[columns[0]][1:] * direction[:-1]
     cumsum_PL = daily.cumsum()
-    return cumsum_PL
+    return daily, cumsum_PL
 
 
 def SPY_longOnly_strategy(data, columns=['Open', 'Close']):
-    r""" Calculate cumulative daily profit-and-loss (P&L).
-
-    Baseline strategy 1:
-
-    """
-    daily = 9 * (data[columns[1]] - data[columns[0]]) / data[columns[0]]
-    cumsum_PL = daily.cumsum()
-    return cumsum_PL
-
-
-def SPY_longOnly_strategy(data, columns=['Open', 'Close']):
-    r""" Calculate cumulative daily profit-and-loss (P&L).
-
-    Baseline strategy 2:
+    r""" Calculate cumulative daily profit-and-loss (P&L) using SPY long-only
+    strategy.
 
     """
-    daily = (data[columns[1]] - data[columns[0]]) / data[columns[0]]
+    daily = 9 * (data[columns[1]][1:] - data[columns[0]][1:]) /\
+            data[columns[0]][1:]
     cumsum_PL = daily.cumsum()
-    return cumsum_PL
+    return daily, cumsum_PL
+
+
+def all_longOnly_strategy(data, columns=['Open', 'Close']):
+    r""" Calculate cumulative daily profit-and-loss (P&L) using all long-only
+    strategy.
+
+    """
+    daily = (data[columns[1]][1:] - data[columns[0]][1:]) /\
+            data[columns[0]][1:]
+    cumsum_PL = daily.cumsum()
+    return daily, cumsum_PL
+
+
+def annualized_sharpe(data):
+    r""" Calculate the annualized sharpe ratio.
+
+    """
+    results = data.mean() / data.std() * np.sqrt(252)
+    return results
+
