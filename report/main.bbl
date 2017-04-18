@@ -1,0 +1,34 @@
+\begin{thebibliography}{1}
+
+\bibitem{Fundreport}
+Can machine learning techniques be used to predict market direction? - the
+  1,000,000 model test.
+\newblock
+  \url{http://www.jonathankinlay.com/Articles/ONE%20MILLION%20MODELS.pdf}.
+\newblock [Accessed: 2017-04-14].
+
+\bibitem{arXiv}
+{\sc Luckyson~Khaidem, Snehanshu~Saha, S. R.~D.}
+\newblock Predicting the direction of stock market prices using random forest.
+\newblock {\em arXiv\/} (2016), 1605.00003v1.
+
+\bibitem{trade}
+{\sc Masoud, N.}
+\newblock Predicting direction of stock prices index movement using artificial
+  neural networks: The case of libyan financial market.
+\newblock {\em British Journal of Economics, Management \& Trade 4\/} (2014),
+  597--619.
+
+\bibitem{plosone}
+{\sc Mingyue~Qiu, Y.~S.}
+\newblock Predicting the direction of stock market index movement using an
+  optimized artificial neural network model.
+\newblock {\em PLOSone 11\/} (2016), e0155133.
+
+\bibitem{thesis}
+Predicting stock markets with neural networks.
+\newblock
+  \url{https://www.duo.uio.no/bitstream/handle/10852/44765/aamodt-master.pdf?sequence=7}.
+\newblock [Accessed: 2017-04-15].
+
+\end{thebibliography}
